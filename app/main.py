@@ -30,6 +30,7 @@ from app.audio_post import (
 )
 from app.auth import require_api_key
 from app.schemas import SpeechRequest
+from app.tts_text import sanitize_tts_text
 from config.settings import (
     ENGTTS_MODEL_DIR,
     ENGTTS_SAMPLE_RATE,
@@ -213,7 +214,7 @@ async def speech(req: SpeechRequest, _auth=Depends(require_api_key)):
 
         engine = VOICE_MAP[req.voice]["engine"]
         if engine == "viettts":
-            normalized_text = _normalizer.normalize(req.input)
+            normalized_text = sanitize_tts_text(_normalizer.normalize(req.input))
         else:
             normalized_text = req.input
 
