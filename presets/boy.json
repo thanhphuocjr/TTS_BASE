@@ -1,0 +1,7 @@
+{
+  "formant_shift": 1.10,
+  "pitch_median": 150.0,
+  "pitch_range": 1.1,
+  "pitch_floor": 100.0,
+  "pitch_ceiling": 400.0
+}

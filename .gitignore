@@ -1,0 +1,57 @@
+# Python cache/build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local virtual environments
+.venv/
+venv/
+env/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Runtime logs and generated outputs
+logs/
+*.log
+outputs/
+output/
+tmp/
+temp/
+compare_voice/13123/
+compare_voice/13124/
+compare_voice/13124_only/
+compare_voice/analyst/
+
+# Large model/data artifacts
+models/
+*.safetensors
+*.pth
+*.pt
+*.onnx
+*.pkl
+
+# Generated or local audio artifacts
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.m4a
+
+# OS/editor metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
