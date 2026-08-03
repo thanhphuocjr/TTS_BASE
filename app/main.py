@@ -23,6 +23,7 @@ from fastapi.responses import Response
 from app import csv_logger
 from app.audio_post import (
     apply_voice_preset,
+    limit_peak,
     sox_tempo,
     to_pcm_bytes,
     to_wav_bytes,
@@ -30,13 +31,13 @@ from app.audio_post import (
 )
 from app.auth import require_api_key
 from app.schemas import SpeechRequest
-from app.tts_text import sanitize_tts_text
 from config.settings import (
     ENGTTS_MODEL_DIR,
     ENGTTS_SAMPLE_RATE,
     MAX_WORKERS,
     MODEL_MAP,
     NORMALIZER_MODEL_DIR,
+    OUTPUT_PEAK_DBFS,
     OUTPUT_SR,
     PORT,
     SOX_PATH,
@@ -214,7 +215,7 @@ async def speech(req: SpeechRequest, _auth=Depends(require_api_key)):
 
         engine = VOICE_MAP[req.voice]["engine"]
         if engine == "viettts":
-            normalized_text = sanitize_tts_text(_normalizer.normalize(req.input))
+            normalized_text = _normalizer.normalize(req.input)
         else:
             normalized_text = req.input
 
@@ -243,6 +244,8 @@ async def speech(req: SpeechRequest, _auth=Depends(require_api_key)):
                 "error": {"code": "empty_audio",
                           "message": "Could not synthesize audio for the given input"}
             })
+
+        audio = limit_peak(audio, OUTPUT_PEAK_DBFS)
 
         if fmt == "wav":
             content = to_wav_bytes(audio, OUTPUT_SR)

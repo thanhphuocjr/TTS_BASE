@@ -50,6 +50,12 @@ PRONUNCIATION_OVERRIDES_SRC = [
     # "Pi" / "pi" -> "Pii" forces /pi/ (defeats English /paɪ/ flip).
     (r"\bPi\b", False, "Pii"),
     (r"\bpi\b", False, "pii"),
+    (r"\bNoel\b", False, "Nô en"),
+    (r"\bAlibaba\b", False, "A li ba ba"),
+    (r"\bJack\b", False, "Rách"),
+    (r"\bSonate\b", False, "Sô nết"),
+    (r"\bFulton\b", False, "Phun từn"),
+    (r"\bBremen\b", False, "Bờ re mừn"),
 ]
 
 # Spoken Vietnamese for time-suffix tokens. Two-syllable forms picked so the

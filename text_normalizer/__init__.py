@@ -21,6 +21,7 @@ from .rules import (
     PUNCT_DECOUPLE_RE,
     apply_symbols,
     expand_times,
+    lowercase_all_caps_words,
     swap_us_to_vi_numbers,
 )
 
@@ -85,29 +86,32 @@ class TextNormalizer:
             logger.warning("normalizer warmup failed: %s", exc)
 
     def normalize(self, text: str) -> str:
-        # 0. Always-on pronunciation overrides.
+        # 0. Lowercase only fully uppercase words, preserving normal casing.
+        text = lowercase_all_caps_words(text)
+
+        # 1. Always-on pronunciation overrides.
         for pattern, replacement in PRONUNCIATION_OVERRIDES:
             text = pattern.sub(replacement, text)
 
         if NORMALIZE_NEEDED_RE.search(text):
-            # 1. Abbreviations (TP.HCM, Q.1, sđt, VND, USD, ...).
+            # 2. Abbreviations (TP.HCM, Q.1, sđt, VND, USD, ...).
             for pattern, replacement in ABBREVIATIONS:
                 text = pattern.sub(replacement, text)
-            # 2. Decouple sentence-ending punctuation from letter tokens so
+            # 3. Decouple sentence-ending punctuation from letter tokens so
             #    the heavy normalizer's tokenizer can't absorb them.
             text = PUNCT_DECOUPLE_RE.sub(r" \1", text)
-            # 3. Spoken-time expansion (HH:MM[:SS] [am|pm|sáng|...]).
+            # 4. Spoken-time expansion (HH:MM[:SS] [am|pm|sáng|...]).
             text = expand_times(text)
-            # 4. Minus between digits → " trừ ".
+            # 5. Minus between digits → " trừ ".
             text = MINUS_BETWEEN_NUMS_RE.sub(" trừ ", text)
-            # 5. Swap US -> VI decimal/thousand separators inside number tokens.
+            # 6. Swap US -> VI decimal/thousand separators inside number tokens.
             text = swap_us_to_vi_numbers(text)
-            # 6. Heavy CRF normalizer (numbers, dates, currency, units, ...).
+            # 7. Heavy CRF normalizer (numbers, dates, currency, units, ...).
             try:
                 text = self._get_inner().normalize(text)
             except Exception as exc:
                 logger.warning("CRF normalize failed: %s", exc)
-            # 7. Sweep any residual symbols.
+            # 8. Sweep any residual symbols.
             text = apply_symbols(text)
 
         return re.sub(r"\s+", " ", text).strip()

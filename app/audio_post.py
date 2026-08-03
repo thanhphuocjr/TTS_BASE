@@ -126,6 +126,17 @@ def to_pcm_bytes(audio: np.ndarray) -> bytes:
     return (audio * 32_767).astype(np.int16).tobytes()
 
 
+def limit_peak(audio: np.ndarray, target_dbfs: float = -1.0) -> np.ndarray:
+    """Attenuate hot output so WAV/PCM encoding does not clip."""
+    if len(audio) == 0:
+        return audio
+    peak = float(np.max(np.abs(audio)))
+    target = float(10 ** (target_dbfs / 20.0))
+    if peak > target > 0:
+        return (audio * (target / peak)).astype(np.float32)
+    return audio.astype(np.float32, copy=False)
+
+
 def transcode_wav(wav_bytes: bytes, fmt: str) -> bytes:
     """Re-encode WAV bytes into mp3/opus/aac/flac via ffmpeg."""
     fd_in, path_in = tempfile.mkstemp(suffix=".wav")

@@ -4,7 +4,7 @@ Hides the underlying inference backend behind a single class. Callers do not
 import anything from the backend package — only this:
 
     from engines.viettts import VietTTSEngine
-    eng = VietTTSEngine(model_dir, device="cuda:0")
+    eng = VietTTSEngine(model_dir, device="cuda:1")
     eng.load()
     eng.register_voice("female", ref_audio="...wav", ref_text_file="...txt")
     audio = eng.synthesize("Xin chào.", voice="female")
@@ -53,7 +53,7 @@ class VietTTSEngine:
     model_dir : Path | str
         Local directory containing the model weights + tokenizer + audio_tokenizer/.
     device : str
-        Torch device string ("cuda:0", "cpu", ...).
+        Torch device string ("cuda:1", "cpu", ...).
     num_step : int
         Diffusion steps for short inputs (high-quality).
     num_step_long : int
@@ -67,9 +67,9 @@ class VietTTSEngine:
     def __init__(
         self,
         model_dir,
-        device: str = "cuda:0",
+        device: str = "cuda:1",
         num_step: int = 24,
-        num_step_long: int = 16,
+        num_step_long: int = 32,
         long_threshold: int = 50,
         torch_compile: bool = False,
     ):

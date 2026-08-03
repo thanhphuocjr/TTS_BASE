@@ -1,8 +1,9 @@
 """Compiled regex + helper functions for the text normalization pipeline.
 
 The orchestrator (TextNormalizer in __init__.py) calls these in order:
-  1. PRONUNCIATION_OVERRIDES — always
-  2. (only if NORMALIZE_NEEDED_RE matches:)
+  1. lowercase all-caps emphasis words — always
+  2. PRONUNCIATION_OVERRIDES — always
+  3. (only if NORMALIZE_NEEDED_RE matches:)
      a. ABBREVIATIONS
      b. punctuation decoupling
      c. expand_times
@@ -63,6 +64,17 @@ TIME_RE = re.compile(
 # normalizer's currency/unit tokenizer can't absorb the punctuation.
 # "VND." -> "VND ." but "5.25" / "25/12/2024" stay attached (digits still glued).
 PUNCT_DECOUPLE_RE = re.compile(r"(?<=[^\W\d_])([.,;!?])")
+
+VI_UPPER = (
+    "A-ZÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊ"
+    "ÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ"
+)
+ALL_CAPS_WORD_RE = re.compile(rf"\b[{VI_UPPER}]{{2,}}\b")
+
+
+def lowercase_all_caps_words(text: str) -> str:
+    """Lowercase only words that are written fully in uppercase."""
+    return ALL_CAPS_WORD_RE.sub(lambda m: m.group(0).lower(), text)
 
 
 def _int_to_vi(n: int) -> str:

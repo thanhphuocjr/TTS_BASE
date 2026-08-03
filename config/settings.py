@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # ---- API / server ---------------------------------------------------------
 API_KEY        = os.environ.get("TTS_API_KEY", "ioit2025")
 HOST           = os.environ.get("TTS_HOST", "0.0.0.0")
-PORT           = int(os.environ.get("TTS_PORT", "13123"))
+PORT           = int(os.environ.get("TTS_PORT", "13125"))
 MAX_WORKERS    = int(os.environ.get("TTS_MAX_WORKERS", "1"))
 OUTPUT_SR      = int(os.environ.get("TTS_OUTPUT_SR", "24000"))
 
@@ -32,10 +32,11 @@ VIETTTS_SAMPLE_RATE = 24_000
 # inputs fall back to `NUM_STEP_LONG` (fewer steps → faster) since the LM
 # backbone forward pass already dominates total latency on long inputs.
 VIETTTS_NUM_STEP        = int(os.environ.get("TTS_VIETTTS_NUM_STEP", "24"))
-VIETTTS_NUM_STEP_LONG   = int(os.environ.get("TTS_VIETTTS_NUM_STEP_LONG", "20"))
+VIETTTS_NUM_STEP_LONG   = int(os.environ.get("TTS_VIETTTS_NUM_STEP_LONG", "32"))
 VIETTTS_LONG_THRESHOLD  = int(os.environ.get("TTS_VIETTTS_LONG_THRESHOLD", "50"))
 VIETTTS_TEMPO           = float(os.environ.get("TTS_VIETTTS_TEMPO", "0.95"))
-VIETTTS_DEVICE          = os.environ.get("TTS_VIETTTS_DEVICE", "cuda:0")
+OUTPUT_PEAK_DBFS        = float(os.environ.get("TTS_OUTPUT_PEAK_DBFS", "-1.0"))
+VIETTTS_DEVICE          = os.environ.get("TTS_VIETTTS_DEVICE", "cuda:1")
 # Off by default — known to cause Vietnamese→English drift mid-utterance on
 # some inputs. Set TTS_VIETTTS_TORCH_COMPILE=1 to opt in (3× speedup if stable).
 VIETTTS_TORCH_COMPILE   = os.environ.get("TTS_VIETTTS_TORCH_COMPILE", "0") == "1"
