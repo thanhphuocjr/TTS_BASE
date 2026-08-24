@@ -68,8 +68,8 @@ class VietTTSEngine:
         self,
         model_dir,
         device: str = "cuda:1",
-        num_step: int = 24,
-        num_step_long: int = 32,
+        num_step: int = 46,
+        num_step_long: int =46,
         long_threshold: int = 50,
         torch_compile: bool = False,
     ):
