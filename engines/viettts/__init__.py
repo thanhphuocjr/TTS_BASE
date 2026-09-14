@@ -61,6 +61,10 @@ class VietTTSEngine:
     long_threshold : int
         Length in characters above which a request is "long" and uses
         `num_step_long`. Defaults to 50.
+    audio_chunk_duration : float
+        Target duration in seconds for each OmniVoice long-form chunk.
+    audio_chunk_threshold : float
+        Estimated output duration in seconds above which chunking is enabled.
     """
     SAMPLE_RATE = 24_000
 
@@ -69,8 +73,10 @@ class VietTTSEngine:
         model_dir,
         device: str = "cuda:1",
         num_step: int = 46,
-        num_step_long: int =46,
+        num_step_long: int = 46,
         long_threshold: int = 50,
+        audio_chunk_duration: float = 10.0,
+        audio_chunk_threshold: float = 15.0,
         torch_compile: bool = False,
     ):
         self._model_dir = str(model_dir)
@@ -78,6 +84,8 @@ class VietTTSEngine:
         self._num_step = num_step
         self._num_step_long = num_step_long
         self._long_threshold = long_threshold
+        self._audio_chunk_duration = audio_chunk_duration
+        self._audio_chunk_threshold = audio_chunk_threshold
         self._torch_compile = torch_compile
         self._model = None
         self._voice_prompts: dict = {}
@@ -88,6 +96,9 @@ class VietTTSEngine:
             return
         import torch  # local — heavy import
         VietTTS = _install_aliases()
+        # Keep OmniVoice's upstream chunk joiner unchanged. It inserts the
+        # original pause between independently generated chunks; overlapping
+        # their voiced edges can produce doubled syllables and phasing/whine.
         logger.info("VietTTS: loading weights from %s", self._model_dir)
         self._model = VietTTS.from_pretrained(
             self._model_dir,
@@ -121,7 +132,12 @@ class VietTTSEngine:
             )
             logger.info("VietTTS: torch.compile warmup complete")
 
-        logger.info("VietTTS: ready")
+        logger.info(
+            "VietTTS: ready (long-form chunk duration=%.1fs, threshold=%.1fs; "
+            "using OmniVoice's default chunk pauses)",
+            self._audio_chunk_duration,
+            self._audio_chunk_threshold,
+        )
 
     def register_voice(self, name: str, ref_audio, ref_text_file) -> None:
         """Cache a voice-clone prompt under `name`. Call after load()."""
@@ -158,6 +174,8 @@ class VietTTSEngine:
             "language": "vietnamese",
             "num_step": num_step,
             "guidance_scale": 2.0,
+            "audio_chunk_duration": self._audio_chunk_duration,
+            "audio_chunk_threshold": self._audio_chunk_threshold,
         }
         if prompt is not None:
             kwargs["voice_clone_prompt"] = prompt

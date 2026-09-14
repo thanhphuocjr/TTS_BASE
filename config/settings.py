@@ -34,7 +34,16 @@ VIETTTS_SAMPLE_RATE = 24_000
 VIETTTS_NUM_STEP        = int(os.environ.get("TTS_VIETTTS_NUM_STEP", "46"))
 VIETTTS_NUM_STEP_LONG   = int(os.environ.get("TTS_VIETTTS_NUM_STEP_LONG", "46"))
 VIETTTS_LONG_THRESHOLD  = int(os.environ.get("TTS_VIETTTS_LONG_THRESHOLD", "50"))
-VIETTTS_TEMPO           = float(os.environ.get("TTS_VIETTTS_TEMPO", "1"))
+# OmniVoice long-form generation. Start chunking once the estimated output is
+# longer than the threshold and keep each generated chunk near the configured
+# duration. Shorter chunks reduce pronunciation/prosody drift on long passages.
+VIETTTS_AUDIO_CHUNK_DURATION  = float(
+    os.environ.get("TTS_VIETTTS_AUDIO_CHUNK_DURATION", "10.0")
+)
+VIETTTS_AUDIO_CHUNK_THRESHOLD = float(
+    os.environ.get("TTS_VIETTTS_AUDIO_CHUNK_THRESHOLD", "15.0")
+)
+VIETTTS_TEMPO           = float(os.environ.get("TTS_VIETTTS_TEMPO", "1.1"))
 OUTPUT_PEAK_DBFS        = float(os.environ.get("TTS_OUTPUT_PEAK_DBFS", "-1.0"))
 VIETTTS_DEVICE          = os.environ.get("TTS_VIETTTS_DEVICE", "cuda:1")
 # Off by default — known to cause Vietnamese→English drift mid-utterance on

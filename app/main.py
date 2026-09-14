@@ -41,6 +41,8 @@ from config.settings import (
     OUTPUT_SR,
     PORT,
     SOX_PATH,
+    VIETTTS_AUDIO_CHUNK_DURATION,
+    VIETTTS_AUDIO_CHUNK_THRESHOLD,
     VIETTTS_DEVICE,
     VIETTTS_LONG_THRESHOLD,
     VIETTTS_MODEL_DIR,
@@ -71,6 +73,8 @@ _viettts: VietTTSEngine = VietTTSEngine(
     num_step=VIETTTS_NUM_STEP,
     num_step_long=VIETTTS_NUM_STEP_LONG,
     long_threshold=VIETTTS_LONG_THRESHOLD,
+    audio_chunk_duration=VIETTTS_AUDIO_CHUNK_DURATION,
+    audio_chunk_threshold=VIETTTS_AUDIO_CHUNK_THRESHOLD,
     torch_compile=VIETTTS_TORCH_COMPILE,
 )
 _engtts: EngTTSEngine = EngTTSEngine(ENGTTS_MODEL_DIR)
@@ -97,8 +101,8 @@ def _load_all() -> None:
         # Register the two cloned voices from voices/ + the shared transcripts.
         _viettts.register_voice(
             "female",
-            ref_audio=VOICES_DIR / "viettts_female_ref.wav",
-            ref_text_file=VOICES_DIR / "viettts_female_ref.txt",
+            ref_audio=VOICES_DIR / "south2.wav",
+            ref_text_file=VOICES_DIR / "south2.txt",
         )
         _viettts.register_voice(
             "male",
