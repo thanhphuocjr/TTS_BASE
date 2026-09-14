@@ -10,4 +10,4 @@ COPY presets /app/presets
 COPY voices /app/voices
 COPY requirements.txt /app/requirements.txt
 
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "13125", "--log-level", "info"]
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "13127", "--log-level", "info"]

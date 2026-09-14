@@ -55,9 +55,14 @@ class VietTTSEngine:
     device : str
         Torch device string ("cuda:1", "cpu", ...).
     num_step : int
-        Diffusion steps for short inputs (high-quality).
+        Diffusion steps for normal inputs (high-quality).
     num_step_long : int
         Diffusion steps for long inputs (faster — LM forward already dominates).
+    num_step_short : int
+        Diffusion steps for ultra-short inputs like letters (ultra-fast).
+    short_threshold : int
+        Length in characters at or below which an input uses `num_step_short`.
+        Defaults to 7.
     long_threshold : int
         Length in characters above which a request is "long" and uses
         `num_step_long`. Defaults to 50.
@@ -74,6 +79,8 @@ class VietTTSEngine:
         device: str = "cuda:1",
         num_step: int = 46,
         num_step_long: int = 46,
+        num_step_short: int = 14,
+        short_threshold: int = 7,
         long_threshold: int = 50,
         audio_chunk_duration: float = 10.0,
         audio_chunk_threshold: float = 15.0,
@@ -83,6 +90,8 @@ class VietTTSEngine:
         self._device = device
         self._num_step = num_step
         self._num_step_long = num_step_long
+        self._num_step_short = num_step_short
+        self._short_threshold = short_threshold
         self._long_threshold = long_threshold
         self._audio_chunk_duration = audio_chunk_duration
         self._audio_chunk_threshold = audio_chunk_threshold
@@ -133,10 +142,13 @@ class VietTTSEngine:
             logger.info("VietTTS: torch.compile warmup complete")
 
         logger.info(
-            "VietTTS: ready (long-form chunk duration=%.1fs, threshold=%.1fs; "
-            "using OmniVoice's default chunk pauses)",
-            self._audio_chunk_duration,
-            self._audio_chunk_threshold,
+            "VietTTS: ready (short step=%d, norm step=%d, long step=%d; "
+            "short thresh=%d, long thresh=%d)",
+            self._num_step_short,
+            self._num_step,
+            self._num_step_long,
+            self._short_threshold,
+            self._long_threshold,
         )
 
     def register_voice(self, name: str, ref_audio, ref_text_file) -> None:
@@ -156,7 +168,12 @@ class VietTTSEngine:
         )
         logger.info("VietTTS: cached voice prompt %r from %s", name, ref_audio.name)
 
-    def synthesize(self, text: str, voice: Optional[str] = None) -> np.ndarray:
+    def synthesize(
+        self,
+        text: str,
+        voice: Optional[str] = None,
+        num_step: Optional[int] = None,
+    ) -> np.ndarray:
         """Generate 24 kHz mono float32 audio for `text`.
 
         If `voice` is registered, uses voice cloning. Otherwise falls back to
@@ -165,11 +182,16 @@ class VietTTSEngine:
         if self._model is None:
             raise RuntimeError("VietTTSEngine.load() must be called before synthesize()")
         prompt = self._voice_prompts.get(voice) if voice else None
-        num_step = (
-            self._num_step_long
-            if len(text) > self._long_threshold
-            else self._num_step
-        )
+
+        if num_step is None:
+            clean_len = len(text.strip().rstrip(".!?。！？;:,"))
+            if clean_len <= self._short_threshold:
+                num_step = self._num_step_short
+            elif len(text) > self._long_threshold:
+                num_step = self._num_step_long
+            else:
+                num_step = self._num_step
+
         kwargs: dict = {
             "language": "vietnamese",
             "num_step": num_step,

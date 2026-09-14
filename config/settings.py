@@ -28,9 +28,14 @@ NORMALIZER_MODEL_DIR = MODELS_DIR / "normalizer"
 
 # ---- VietTTS engine knobs -------------------------------------------------
 VIETTTS_SAMPLE_RATE = 24_000
-# Diffusion steps. Short inputs use the high-quality `NUM_STEP` value; long
-# inputs fall back to `NUM_STEP_LONG` (fewer steps → faster) since the LM
-# backbone forward pass already dominates total latency on long inputs.
+# Diffusion steps:
+# - Ultra-short inputs (letters or short words <= SHORT_THRESHOLD chars) use
+#   `NUM_STEP_SHORT` (12-16 steps) for fast synthesis (~100ms per letter).
+# - Normal inputs use the high-quality `NUM_STEP` value (46 steps).
+# - Long inputs fall back to `NUM_STEP_LONG` (46 steps) since the LM
+#   backbone forward pass already dominates total latency on long inputs.
+VIETTTS_NUM_STEP_SHORT  = int(os.environ.get("TTS_VIETTTS_NUM_STEP_SHORT", "14"))
+VIETTTS_SHORT_THRESHOLD = int(os.environ.get("TTS_VIETTTS_SHORT_THRESHOLD", "8"))
 VIETTTS_NUM_STEP        = int(os.environ.get("TTS_VIETTTS_NUM_STEP", "46"))
 VIETTTS_NUM_STEP_LONG   = int(os.environ.get("TTS_VIETTTS_NUM_STEP_LONG", "46"))
 VIETTTS_LONG_THRESHOLD  = int(os.environ.get("TTS_VIETTTS_LONG_THRESHOLD", "50"))
@@ -44,6 +49,8 @@ VIETTTS_AUDIO_CHUNK_THRESHOLD = float(
     os.environ.get("TTS_VIETTTS_AUDIO_CHUNK_THRESHOLD", "15.0")
 )
 VIETTTS_TEMPO           = float(os.environ.get("TTS_VIETTTS_TEMPO", "1.1"))
+COLON_PAUSE_SECONDS     = float(os.environ.get("TTS_COLON_PAUSE_SECONDS", "0.2"))
+ELLIPSIS_PAUSE_SECONDS  = float(os.environ.get("TTS_ELLIPSIS_PAUSE_SECONDS", "0.4"))
 OUTPUT_PEAK_DBFS        = float(os.environ.get("TTS_OUTPUT_PEAK_DBFS", "-1.0"))
 VIETTTS_DEVICE          = os.environ.get("TTS_VIETTTS_DEVICE", "cuda:1")
 # Off by default — known to cause Vietnamese→English drift mid-utterance on

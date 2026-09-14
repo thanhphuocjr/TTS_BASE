@@ -10,11 +10,13 @@ Auth: Bearer token via config.settings.API_KEY.
 """
 import asyncio
 import logging
+import re
 import threading
 import time
 import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from typing import Optional
 
 import numpy as np
 from fastapi import Depends, FastAPI, HTTPException
@@ -32,6 +34,8 @@ from app.audio_post import (
 from app.auth import require_api_key
 from app.schemas import SpeechRequest
 from config.settings import (
+    COLON_PAUSE_SECONDS,
+    ELLIPSIS_PAUSE_SECONDS,
     ENGTTS_MODEL_DIR,
     ENGTTS_SAMPLE_RATE,
     MAX_WORKERS,
@@ -48,6 +52,8 @@ from config.settings import (
     VIETTTS_MODEL_DIR,
     VIETTTS_NUM_STEP,
     VIETTTS_NUM_STEP_LONG,
+    VIETTTS_NUM_STEP_SHORT,
+    VIETTTS_SHORT_THRESHOLD,
     VIETTTS_TORCH_COMPILE,
     VIETTTS_SAMPLE_RATE,
     VIETTTS_TEMPO,
@@ -72,6 +78,8 @@ _viettts: VietTTSEngine = VietTTSEngine(
     device=VIETTTS_DEVICE,
     num_step=VIETTTS_NUM_STEP,
     num_step_long=VIETTTS_NUM_STEP_LONG,
+    num_step_short=VIETTTS_NUM_STEP_SHORT,
+    short_threshold=VIETTTS_SHORT_THRESHOLD,
     long_threshold=VIETTTS_LONG_THRESHOLD,
     audio_chunk_duration=VIETTTS_AUDIO_CHUNK_DURATION,
     audio_chunk_threshold=VIETTTS_AUDIO_CHUNK_THRESHOLD,
@@ -132,7 +140,45 @@ def _ensure_punctuation(text: str) -> str:
     return text
 
 
-def _synthesize(voice: str, text: str, speed: float = 1.0) -> np.ndarray:
+PAUSE_TOKEN_RE = re.compile(r"((?:\s*(?:(?<!\d):(?!\/\/)|(?:\.{2,}|\u2026)+)\s*)+)")
+
+
+def _split_text_with_pauses(
+    text: str,
+    colon_pause: float,
+    ellipsis_pause: float,
+) -> list[tuple[str, float]]:
+    """Split text by colons and ellipses, associating each non-empty segment with its following pause."""
+    tokens = PAUSE_TOKEN_RE.split(text)
+    items: list[tuple[str, Optional[str]]] = []
+
+    for i in range(0, len(tokens), 2):
+        txt = tokens[i].strip()
+        delim = tokens[i + 1] if i + 1 < len(tokens) else None
+        if txt:
+            items.append((txt, delim))
+        elif delim and items:
+            prev_txt, prev_delim = items[-1]
+            items[-1] = (prev_txt, (prev_delim or "") + delim)
+
+    segments: list[tuple[str, float]] = []
+    for idx, (txt, delim) in enumerate(items):
+        pause = 0.0
+        if idx < len(items) - 1 and delim:
+            if "." in delim or "\u2026" in delim:
+                pause = ellipsis_pause
+            elif ":" in delim:
+                pause = colon_pause
+        segments.append((txt, pause))
+    return segments
+
+
+def _synthesize_single(
+    voice: str,
+    text: str,
+    speed: float = 1.0,
+    num_step: Optional[int] = None,
+) -> np.ndarray:
     cfg = VOICE_MAP.get(voice)
     if cfg is None:
         raise ValueError(f"Unknown voice '{voice}'. Available: {list(VOICE_MAP.keys())}")
@@ -142,9 +188,8 @@ def _synthesize(voice: str, text: str, speed: float = 1.0) -> np.ndarray:
     if engine == "viettts":
         gender = cfg.get("gender", "female")
         voice_name = "male" if gender == "male" else "female"
-        audio = _viettts.synthesize(text, voice=voice_name)
-        # Server default tempo (e.g. 0.95 = "slightly slower") multiplied by
-        # the client-requested speed. speed=1.0 keeps backward compatibility.
+        audio = _viettts.synthesize(text, voice=voice_name, num_step=num_step)
+        # Server default tempo multiplied by client-requested speed.
         effective_tempo = VIETTTS_TEMPO * speed
         if effective_tempo != 1.0 and len(audio) > 0:
             audio = sox_tempo(audio, VIETTTS_SAMPLE_RATE, effective_tempo)
@@ -161,6 +206,56 @@ def _synthesize(voice: str, text: str, speed: float = 1.0) -> np.ndarray:
         return audio
 
     raise ValueError(f"Unknown engine '{engine}' for voice '{voice}'")
+
+
+def _synthesize(
+    voice: str,
+    text: str,
+    speed: float = 1.0,
+    pause_seconds: Optional[float] = None,
+    colon_pause_seconds: Optional[float] = None,
+    ellipsis_pause_seconds: Optional[float] = None,
+    num_step: Optional[int] = None,
+) -> np.ndarray:
+    """Synthesize speech with physical silence injection at colon (":") and ellipsis ("...") boundaries."""
+    c_pause = colon_pause_seconds if colon_pause_seconds is not None else (
+        pause_seconds if pause_seconds is not None else COLON_PAUSE_SECONDS
+    )
+    e_pause = ellipsis_pause_seconds if ellipsis_pause_seconds is not None else (
+        pause_seconds if pause_seconds is not None else ELLIPSIS_PAUSE_SECONDS
+    )
+
+    segments = _split_text_with_pauses(text, colon_pause=c_pause, ellipsis_pause=e_pause)
+    if not segments:
+        return np.array([], dtype=np.float32)
+
+    # Fast path: single sentence without pause delimiters
+    if len(segments) == 1:
+        return _synthesize_single(voice, segments[0][0], speed, num_step=num_step)
+
+    # Physical silence injection between segments
+    chunks = []
+    for i, (part, pause_dur) in enumerate(segments):
+        chunk = _synthesize_single(voice, part, speed, num_step=num_step)
+        if len(chunk) > 0:
+            # 5ms linear fade at edges to prevent boundary clicks/pops
+            fade_len = min(120, len(chunk) // 2)
+            if fade_len > 0:
+                chunk = chunk.copy()
+                chunk[:fade_len] *= np.linspace(0.0, 1.0, fade_len, dtype=np.float32)
+                chunk[-fade_len:] *= np.linspace(1.0, 0.0, fade_len, dtype=np.float32)
+
+            chunks.append(chunk)
+            if i < len(segments) - 1 and pause_dur > 0:
+                silence_samples = int(OUTPUT_SR * max(0.0, pause_dur))
+                if silence_samples > 0:
+                    chunks.append(np.zeros(silence_samples, dtype=np.float32))
+
+    if not chunks:
+        return np.array([], dtype=np.float32)
+
+    return np.concatenate(chunks)
+
 
 
 # ---------------------------------------------------------------------------
@@ -228,9 +323,31 @@ async def speech(req: SpeechRequest, _auth=Depends(require_api_key)):
         logger.info(f"[{request_id}] input_length={len(req.input)} input_text={req.input!r}")
         logger.info(f"[{request_id}] normalized_text={normalized_text!r}")
 
+        if (
+            req.colon_pause_seconds is not None
+            or req.ellipsis_pause_seconds is not None
+            or req.pause_seconds is not None
+            or req.num_step is not None
+        ):
+            logger.info(
+                f"[{request_id}] overrides: colon={req.colon_pause_seconds}s "
+                f"ellipsis={req.ellipsis_pause_seconds}s pause={req.pause_seconds}s "
+                f"num_step={req.num_step}"
+            )
+
         loop = asyncio.get_running_loop()
         try:
-            audio = await loop.run_in_executor(_executor, _synthesize, req.voice, normalized_text, req.speed)
+            audio = await loop.run_in_executor(
+                _executor,
+                _synthesize,
+                req.voice,
+                normalized_text,
+                req.speed,
+                req.pause_seconds,
+                req.colon_pause_seconds,
+                req.ellipsis_pause_seconds,
+                req.num_step,
+            )
         except Exception as exc:
             status_code, error_msg = 500, f"synthesis_error: {exc}"
             csv_logger.log_error_text(
