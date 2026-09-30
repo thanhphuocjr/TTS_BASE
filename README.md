@@ -4,6 +4,8 @@ Hệ thống dịch vụ chuyển văn bản thành giọng nói (**Text-to-Spee
 
 Cung cấp giao diện lập trình chuẩn OpenAI (`POST /v1/audio/speech`), sẵn sàng tích hợp trực tiếp vào các hệ thống trợ lý ảo, Voicebot và Agent đàm thoại thời gian thực.
 
+> 📖 **Xem thêm**: [Hướng dẫn tích hợp client & tính năng học tiếng Anh](file:///Users/phuocthanh/streamingtts_13125_code/README_INTEGRATION.md) (Chuyển đổi ngôn ngữ realtime, ví dụ code Python requests/httpx, kịch bản mẫu).
+
 ---
 
 ## MỤC LỤC
@@ -128,7 +130,7 @@ sequenceDiagram
     VEng->>RAM: Lưu đối tượng VoiceClonePrompt vào self._voice_prompts["female"]
     deactivate VEng
 
-    Main->>VEng: register_voice("male", viettts_male_ref.wav, ...)
+    Main->>VEng: register_voice("male", north1.wav, north1.txt)
     activate VEng
     VEng->>RAM: Lưu đối tượng VoiceClonePrompt vào self._voice_prompts["male"]
     deactivate VEng
@@ -325,7 +327,7 @@ Hệ thống định tuyến giọng đọc theo bảng cấu hình trong [confi
 | Voice ID | Động Cơ | Giọng Mẫu / Preset Gốc | Kỹ Thuật Tổng Hợp | Tần Số Mẫu | Mô Tả |
 | :---: | :---: | :---: | :---: | :---: | :--- |
 | **`vi_fe`** | `viettts` | `voices/south2.wav` + `.txt` | In-Context Voice Clone | 24,000 Hz | Giọng nữ miền Nam chuẩn, tự nhiên, biểu cảm |
-| **`vi_ma`** | `viettts` | `voices/viettts_male_ref.wav` + `.txt` | In-Context Voice Clone | 24,000 Hz | Giọng nam miền Bắc, trầm ấm, truyền cảm |
+| **`vi_ma`** | `viettts` | `voices/north1.wav` + `.txt` | In-Context Voice Clone | 24,000 Hz | Giọng nam miền Bắc, trầm ấm, truyền cảm |
 | **`en_fe`** | `engtts` | `af_heart` (Kokoro) + Praat `girl` | Kokoro + Formant/Pitch Shift | 24,000 Hz | Giọng nữ/bé gái tiếng Anh |
 | **`en_ma`** | `engtts` | `am_puck` (Kokoro) + Praat `boy` | Kokoro + Formant/Pitch Shift | 24,000 Hz | Giọng nam/bé trai tiếng Anh |
 

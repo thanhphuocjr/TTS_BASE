@@ -114,8 +114,8 @@ def _load_all() -> None:
         )
         _viettts.register_voice(
             "male",
-            ref_audio=VOICES_DIR / "viettts_male_ref.wav",
-            ref_text_file=VOICES_DIR / "viettts_male_ref.txt",
+            ref_audio=VOICES_DIR / "north1.wav",
+            ref_text_file=VOICES_DIR / "north1.txt",
         )
         _engtts.load(warmup_voices=("af_heart", "am_puck"))
         _normalizer.warmup()
