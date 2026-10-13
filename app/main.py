@@ -25,6 +25,7 @@ from fastapi.responses import Response
 from app import csv_logger
 from app.audio_post import (
     apply_voice_preset,
+    boost_loudness,
     limit_peak,
     sox_tempo,
     to_pcm_bytes,
@@ -38,6 +39,7 @@ from config.settings import (
     ELLIPSIS_PAUSE_SECONDS,
     ENGTTS_MODEL_DIR,
     ENGTTS_SAMPLE_RATE,
+    ENGTTS_VOLUME_BOOST,
     MAX_WORKERS,
     MODEL_MAP,
     NORMALIZER_MODEL_DIR,
@@ -203,6 +205,9 @@ def _synthesize_single(
         # English engine has no server-default tempo — pass client speed through.
         if speed != 1.0 and len(audio) > 0:
             audio = sox_tempo(audio, ENGTTS_SAMPLE_RATE, speed)
+        # Nâng âm lượng mặc định cho giọng tiếng Anh
+        if ENGTTS_VOLUME_BOOST > 1.0 and len(audio) > 0:
+            audio = boost_loudness(audio, ENGTTS_VOLUME_BOOST)
         return audio
 
     raise ValueError(f"Unknown engine '{engine}' for voice '{voice}'")

@@ -11,7 +11,7 @@ Success is not something that happens overnight; it is the result of continuous 
 EOF
 )"
 TEXT="${1:-$DEFAULT_TEXT}"
-VOICE="${2:-en_fe}"
+VOICE="${2:-en_ma}"
 OUT="${3:-tts_13127_$(date +%Y%m%d_%H%M%S).wav}"
 
 require_cmd() {

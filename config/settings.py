@@ -58,7 +58,8 @@ VIETTTS_DEVICE          = os.environ.get("TTS_VIETTTS_DEVICE", "cuda:1")
 VIETTTS_TORCH_COMPILE   = os.environ.get("TTS_VIETTTS_TORCH_COMPILE", "0") == "1"
 
 # ---- EngTTS engine knobs --------------------------------------------------
-ENGTTS_SAMPLE_RATE = 24_000
+ENGTTS_SAMPLE_RATE  = 24_000
+ENGTTS_VOLUME_BOOST = float(os.environ.get("TTS_ENGTTS_VOLUME_BOOST", "1.4"))
 
 # ---- Voice catalogue ------------------------------------------------------
 # Maps the OpenAI-style voice id -> engine routing.

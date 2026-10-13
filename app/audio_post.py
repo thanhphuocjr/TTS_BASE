@@ -137,6 +137,15 @@ def limit_peak(audio: np.ndarray, target_dbfs: float = -1.0) -> np.ndarray:
     return audio.astype(np.float32, copy=False)
 
 
+def boost_loudness(audio: np.ndarray, gain: float = 1.4) -> np.ndarray:
+    """Boost perceived loudness (RMS) via soft saturation tanh without clipping."""
+    if len(audio) == 0 or gain <= 1.0:
+        return audio
+    tanh_gain = float(np.tanh(gain))
+    boosted = np.tanh(audio * gain) / tanh_gain
+    return boosted.astype(np.float32)
+
+
 def transcode_wav(wav_bytes: bytes, fmt: str) -> bytes:
     """Re-encode WAV bytes into mp3/opus/aac/flac via ffmpeg."""
     fd_in, path_in = tempfile.mkstemp(suffix=".wav")
