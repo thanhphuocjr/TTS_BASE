@@ -272,3 +272,41 @@ docker run -d \
   -v ~/Desktop/streamingtts-v7/voices:/app/voices \
   streamingtts:v7
 ```
+
+---
+
+## PHẦN 6: TRIỂN KHAI PHIÊN BẢN V8 (PORT 13128)
+
+Phiên bản `streamingtts-v8` tích hợp kiến trúc **Dual OmniVoice**:
+- **VietTTS** (`models/viettts`): OmniVoice finetuned tiếng Việt giọng Bắc & Nam (`north`, `south` / `vi_north`, `vi_south`).
+- **EngTTS** (`models/engtts`): OmniVoice gốc tải từ k2-fsa/OmniVoice cho tiếng Anh chuẩn bản ngữ (`north`, `south` / `en_north`, `en_south`).
+
+### 6.1. Đồng bộ từ Mac lên Server
+Trên máy Mac:
+```bash
+./sync_to_server.sh
+```
+
+### 6.2. Khởi chạy trên Server
+Trên terminal Server:
+```bash
+cd ~/Desktop/streamingtts-v8
+./run_v8.sh        # Chạy trên GPU 0 (mặc định)
+# hoặc: ./run_v8.sh 1  (chạy trên GPU 1)
+```
+Lệnh trên sẽ:
+- Build image `streamingtts:v8`
+- Tạo container `streamingtts-v8` chạy trên cổng **13128**
+
+### 6.3. Test âm thanh
+Từ máy Mac:
+```bash
+# Test tiếng Anh giọng North / South
+./test_13128.sh "The oyster has a beautiful pearl." north
+./test_13128.sh "Success is the result of preparation and hard work." south
+
+# Test tiếng Việt giọng Bắc / Nam
+./test_13128.sh "Hôm nay thời tiết Hà Nội rất đẹp." north
+./test_13128.sh "Hôm nay thời tiết Sài Gòn rất đẹp." south
+```
+

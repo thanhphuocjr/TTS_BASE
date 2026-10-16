@@ -1,6 +1,8 @@
-FROM streamingtts:v5
+FROM streamingtts:v7
 
 WORKDIR /app
+
+ENV PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 
 COPY app /app/app
 COPY config /app/config
@@ -10,4 +12,4 @@ COPY presets /app/presets
 COPY voices /app/voices
 COPY requirements.txt /app/requirements.txt
 
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "13127", "--log-level", "info"]
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "13128", "--log-level", "info"]

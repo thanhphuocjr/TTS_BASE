@@ -12,8 +12,6 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
-import parselmouth
-from parselmouth.praat import call
 
 from config.settings import OUTPUT_SR, PRESETS_DIR, SOX_PATH
 
@@ -65,6 +63,11 @@ def apply_voice_preset(audio: np.ndarray, sr: int, preset_name: str) -> np.ndarr
     """Apply a Praat 'Change gender' transform with sox pre/post processing."""
     if SOX_PATH is None:
         raise RuntimeError("sox not found")
+    try:
+        import parselmouth
+        from parselmouth.praat import call
+    except ImportError:
+        return audio
     import soundfile as sf
 
     preset = _load_preset(preset_name)

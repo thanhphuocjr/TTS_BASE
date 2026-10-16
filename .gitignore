@@ -47,6 +47,8 @@ models/
 *.flac
 *.ogg
 *.m4a
+!voices/*.wav
+!voices/*.mp3
 
 # OS/editor metadata
 .DS_Store

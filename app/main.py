@@ -1,10 +1,10 @@
 """Unified TTS Server — OpenAI-compatible API (POST /v1/audio/speech).
 
-Routes are voice-id based:
-  voice=vi_fe -> VietTTSEngine, cloned female voice
-  voice=vi_ma -> VietTTSEngine, cloned male voice
-  voice=en_fe -> EngTTSEngine + girl voice-changer preset
-  voice=en_ma -> EngTTSEngine + boy voice-changer preset
+Routes are voice-id based (all powered by OmniVoice Zero-Shot Voice Cloning):
+  voice=vi_fe -> VietTTSEngine (OmniVoice), cloned female voice (south2)
+  voice=vi_ma -> VietTTSEngine (OmniVoice), cloned male voice (north1)
+  voice=en_fe -> VietTTSEngine (OmniVoice), cloned English female voice (english1)
+  voice=en_ma -> VietTTSEngine (OmniVoice), cloned English male voice (english2)
 
 Auth: Bearer token via config.settings.API_KEY.
 """
@@ -24,7 +24,6 @@ from fastapi.responses import Response
 
 from app import csv_logger
 from app.audio_post import (
-    apply_voice_preset,
     boost_loudness,
     limit_peak,
     sox_tempo,
@@ -37,8 +36,17 @@ from app.schemas import SpeechRequest
 from config.settings import (
     COLON_PAUSE_SECONDS,
     ELLIPSIS_PAUSE_SECONDS,
+    ENGTTS_AUDIO_CHUNK_DURATION,
+    ENGTTS_AUDIO_CHUNK_THRESHOLD,
+    ENGTTS_DEVICE,
+    ENGTTS_LONG_THRESHOLD,
     ENGTTS_MODEL_DIR,
+    ENGTTS_NUM_STEP,
+    ENGTTS_NUM_STEP_LONG,
+    ENGTTS_NUM_STEP_SHORT,
     ENGTTS_SAMPLE_RATE,
+    ENGTTS_SHORT_THRESHOLD,
+    ENGTTS_TORCH_COMPILE,
     ENGTTS_VOLUME_BOOST,
     MAX_WORKERS,
     MODEL_MAP,
@@ -59,6 +67,7 @@ from config.settings import (
     VIETTTS_TORCH_COMPILE,
     VIETTTS_SAMPLE_RATE,
     VIETTTS_TEMPO,
+    VIETTTS_VOLUME_BOOST,
     VOICE_MAP,
     VOICES_DIR,
 )
@@ -87,7 +96,18 @@ _viettts: VietTTSEngine = VietTTSEngine(
     audio_chunk_threshold=VIETTTS_AUDIO_CHUNK_THRESHOLD,
     torch_compile=VIETTTS_TORCH_COMPILE,
 )
-_engtts: EngTTSEngine = EngTTSEngine(ENGTTS_MODEL_DIR)
+_engtts: EngTTSEngine = EngTTSEngine(
+    ENGTTS_MODEL_DIR,
+    device=ENGTTS_DEVICE,
+    num_step=ENGTTS_NUM_STEP,
+    num_step_long=ENGTTS_NUM_STEP_LONG,
+    num_step_short=ENGTTS_NUM_STEP_SHORT,
+    short_threshold=ENGTTS_SHORT_THRESHOLD,
+    long_threshold=ENGTTS_LONG_THRESHOLD,
+    audio_chunk_duration=ENGTTS_AUDIO_CHUNK_DURATION,
+    audio_chunk_threshold=ENGTTS_AUDIO_CHUNK_THRESHOLD,
+    torch_compile=ENGTTS_TORCH_COMPILE,
+)
 _normalizer: TextNormalizer = TextNormalizer(model_path=str(NORMALIZER_MODEL_DIR))
 
 MIME_MAP = {
@@ -107,21 +127,91 @@ app = FastAPI(title="Unified TTS Server (OpenAI-compatible)")
 # ---------------------------------------------------------------------------
 def _load_all() -> None:
     with _lock:
+        import gc
+        import torch
+
+        # 1. VietTTS: OmniVoice fine-tuned for Vietnamese
         _viettts.load()
-        # Register the two cloned voices from voices/ + the shared transcripts.
         _viettts.register_voice(
-            "female",
-            ref_audio=VOICES_DIR / "south2.wav",
-            ref_text_file=VOICES_DIR / "south2.txt",
+            "vietnamese_north",
+            ref_audio=VOICES_DIR / "vietnamese_north.wav",
+            ref_text_file=VOICES_DIR / "vietnamese_north.txt",
         )
         _viettts.register_voice(
-            "male",
-            ref_audio=VOICES_DIR / "north1.wav",
-            ref_text_file=VOICES_DIR / "north1.txt",
+            "vietnamese_south",
+            ref_audio=VOICES_DIR / "vietnamese_south.wav",
+            ref_text_file=VOICES_DIR / "vietnamese_south.txt",
         )
-        _engtts.load(warmup_voices=("af_heart", "am_puck"))
+        # Backward-compatible voice aliases in prompt cache
+        if "vietnamese_north" in _viettts._voice_prompts:
+            _viettts._voice_prompts["north"] = _viettts._voice_prompts["vietnamese_north"]
+            _viettts._voice_prompts["vi_north"] = _viettts._voice_prompts["vietnamese_north"]
+            _viettts._voice_prompts["vi_male"] = _viettts._voice_prompts["vietnamese_north"]
+            _viettts._voice_prompts["male"] = _viettts._voice_prompts["vietnamese_north"]
+            _viettts._voice_prompts["vi_ma"] = _viettts._voice_prompts["vietnamese_north"]
+        if "vietnamese_south" in _viettts._voice_prompts:
+            _viettts._voice_prompts["south"] = _viettts._voice_prompts["vietnamese_south"]
+            _viettts._voice_prompts["vi_south"] = _viettts._voice_prompts["vietnamese_south"]
+            _viettts._voice_prompts["vi_female"] = _viettts._voice_prompts["vietnamese_south"]
+            _viettts._voice_prompts["female"] = _viettts._voice_prompts["vietnamese_south"]
+            _viettts._voice_prompts["vi_fe"] = _viettts._voice_prompts["vietnamese_south"]
+
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        # 2. EngTTS: OmniVoice official pretrained for English
+        _engtts.load()
+
+        # If both models are on the same CUDA device, share the audio tokenizer
+        # (DAC 24kHz codec is identical) to save ~768MB VRAM.
+        if (
+            _viettts._model is not None
+            and _engtts._model is not None
+            and str(_viettts._device) == str(_engtts._device)
+            and hasattr(_viettts._model, "audio_tokenizer")
+            and hasattr(_engtts._model, "audio_tokenizer")
+        ):
+            del _engtts._model.audio_tokenizer
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            _engtts._model.audio_tokenizer = _viettts._model.audio_tokenizer
+            logger.info("EngTTS: shared audio_tokenizer with VietTTS (freed ~768MB VRAM)")
+
+        _engtts.register_voice(
+            "english_north",
+            ref_audio=VOICES_DIR / "english_north.wav",
+            ref_text_file=VOICES_DIR / "english_north.txt",
+        )
+        _engtts.register_voice(
+            "english_south",
+            ref_audio=VOICES_DIR / "english_south.wav",
+            ref_text_file=VOICES_DIR / "english_south.txt",
+        )
+        # Backward-compatible voice aliases in prompt cache
+        if "english_north" in _engtts._voice_prompts:
+            _engtts._voice_prompts["en_north"] = _engtts._voice_prompts["english_north"]
+            _engtts._voice_prompts["en_male"] = _engtts._voice_prompts["english_north"]
+            _engtts._voice_prompts["en_ma"] = _engtts._voice_prompts["english_north"]
+            _engtts._voice_prompts["north"] = _engtts._voice_prompts["english_north"]
+        if "english_south" in _engtts._voice_prompts:
+            _engtts._voice_prompts["en_south"] = _engtts._voice_prompts["english_south"]
+            _engtts._voice_prompts["en_female"] = _engtts._voice_prompts["english_south"]
+            _engtts._voice_prompts["en_fe"] = _engtts._voice_prompts["english_south"]
+            _engtts._voice_prompts["south"] = _engtts._voice_prompts["english_south"]
+
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        # 3. Post-load warmups
+        _viettts.warmup()
+        _engtts.warmup()
+
+        # 4. Vietnamese text normalizer (CRF + rules)
         _normalizer.warmup()
-    logger.info("[tts_server] All models ready")
+    logger.info("[tts_server] All models ready: VietTTS (OmniVoice-VI) & EngTTS (OmniVoice-EN)")
 
 
 @app.on_event("startup")
@@ -185,29 +275,38 @@ def _synthesize_single(
     if cfg is None:
         raise ValueError(f"Unknown voice '{voice}'. Available: {list(VOICE_MAP.keys())}")
     text = _ensure_punctuation(text)
-    engine = cfg["engine"]
+    engine = cfg.get("engine", "viettts")
+    voice_name = cfg.get("voice", voice)
 
     if engine == "viettts":
-        gender = cfg.get("gender", "female")
-        voice_name = "male" if gender == "male" else "female"
-        audio = _viettts.synthesize(text, voice=voice_name, num_step=num_step)
-        # Server default tempo multiplied by client-requested speed.
+        audio = _viettts.synthesize(
+            text,
+            voice=voice_name,
+            language="vietnamese",
+            num_step=num_step,
+        )
         effective_tempo = VIETTTS_TEMPO * speed
         if effective_tempo != 1.0 and len(audio) > 0:
             audio = sox_tempo(audio, VIETTTS_SAMPLE_RATE, effective_tempo)
+        if VIETTTS_VOLUME_BOOST > 1.0 and len(audio) > 0:
+            audio = boost_loudness(audio, VIETTTS_VOLUME_BOOST)
         return audio
 
     if engine == "engtts":
-        audio = _engtts.synthesize(text, voice=cfg["voice"])
-        change = cfg.get("voice_change")
-        if change and len(audio) > 0:
-            audio = apply_voice_preset(audio, ENGTTS_SAMPLE_RATE, change)
-        # English engine has no server-default tempo — pass client speed through.
+        audio = _engtts.synthesize(
+            text,
+            voice=voice_name,
+            language="english",
+            num_step=num_step,
+        )
         if speed != 1.0 and len(audio) > 0:
             audio = sox_tempo(audio, ENGTTS_SAMPLE_RATE, speed)
-        # Nâng âm lượng mặc định cho giọng tiếng Anh
-        if ENGTTS_VOLUME_BOOST > 1.0 and len(audio) > 0:
-            audio = boost_loudness(audio, ENGTTS_VOLUME_BOOST)
+        if len(audio) > 0:
+            peak = float(np.max(np.abs(audio)))
+            if 0 < peak < 0.85:
+                audio = (audio * (0.85 / peak)).astype(np.float32)
+            if ENGTTS_VOLUME_BOOST > 1.0:
+                audio = boost_loudness(audio, ENGTTS_VOLUME_BOOST)
         return audio
 
     raise ValueError(f"Unknown engine '{engine}' for voice '{voice}'")
@@ -300,7 +399,19 @@ async def speech(req: SpeechRequest, _auth=Depends(require_api_key)):
                 "error": {"code": "invalid_input", "message": "'input' must not be empty"}
             })
 
-        if req.voice not in VOICE_MAP:
+        voice_key = req.voice
+        if req.voice in ("north", "south"):
+            if req.model == "EngTTS":
+                voice_key = f"en_{req.voice}"
+            else:
+                voice_key = f"vi_{req.voice}"
+        elif req.voice not in VOICE_MAP:
+            for candidate in (f"vi_{req.voice}", f"en_{req.voice}", f"vietnamese_{req.voice}", f"english_{req.voice}"):
+                if candidate in VOICE_MAP:
+                    voice_key = candidate
+                    break
+
+        if voice_key not in VOICE_MAP:
             status_code, error_msg = 400, f"invalid_voice: '{req.voice}'"
             _finalize()
             raise HTTPException(status_code=400, detail={
@@ -317,14 +428,14 @@ async def speech(req: SpeechRequest, _auth=Depends(require_api_key)):
                           "message": f"Unsupported format '{fmt}'. Available: {list(MIME_MAP.keys())}"},
             })
 
-        engine = VOICE_MAP[req.voice]["engine"]
+        engine = VOICE_MAP[voice_key].get("engine", "viettts")
         if engine == "viettts":
             normalized_text = _normalizer.normalize(req.input)
         else:
             normalized_text = req.input
 
         logger.info(f"[{request_id}] === /v1/audio/speech ===")
-        logger.info(f"[{request_id}] model={req.model} voice={req.voice} format={fmt}")
+        logger.info(f"[{request_id}] model={req.model} voice={voice_key} (req={req.voice}) format={fmt}")
         logger.info(f"[{request_id}] input_length={len(req.input)} input_text={req.input!r}")
         logger.info(f"[{request_id}] normalized_text={normalized_text!r}")
 
@@ -345,7 +456,7 @@ async def speech(req: SpeechRequest, _auth=Depends(require_api_key)):
             audio = await loop.run_in_executor(
                 _executor,
                 _synthesize,
-                req.voice,
+                voice_key,
                 normalized_text,
                 req.speed,
                 req.pause_seconds,

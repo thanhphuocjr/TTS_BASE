@@ -7,7 +7,7 @@ class SpeechRequest(BaseModel):
     """OpenAI-compatible request body for POST /v1/audio/speech."""
     model: str = "VietTTS"
     input: str
-    voice: str = "vi_fe"
+    voice: str = "north"
     response_format: str = "wav"
     # OpenAI-compatible: 1.0 = engine default (no client adjustment). For
     # VietTTS, the server still applies its own VIETTTS_TEMPO on top — so

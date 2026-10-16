@@ -9,9 +9,8 @@
 torch==2.8.0
 torchaudio==2.8.0
 
-# TTS backends (used only inside engines/viettts/ and engines/engtts/)
+# TTS backend (used by engines/viettts/ and engines/engtts/)
 omnivoice
-kokoro>=0.9.4
 
 # Vietnamese text normalization (used only inside text_normalizer/)
 # soe-vinorm itself is installed separately in the Dockerfile with --no-deps
@@ -21,9 +20,6 @@ sklearn-crfsuite
 onnxruntime
 unidecode
 num2words
-
-# Voice changer
-praat-parselmouth
 
 # Audio I/O
 soundfile>=0.12.0

@@ -114,8 +114,8 @@ class VietTTSEngine:
             device_map=self._device,
             dtype=torch.float16,
         )
-        # Warmup pass so first real request doesn't pay the JIT cost.
-        self._model.generate(text="Xin chào.", language="vietnamese", num_step=8)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         if self._torch_compile:
             # Compile the model graph. KNOWN RISK: at low num_step the model has
@@ -133,28 +133,23 @@ class VietTTSEngine:
             self._model = torch.compile(
                 self._model, mode="reduce-overhead", dynamic=True,
             )
-            # Trigger the actual compile with one representative call.
-            self._model.generate(
-                text="Xin chào, đây là một câu kiểm tra.",
-                language="vietnamese",
-                num_step=self._num_step,
-            )
-            logger.info("VietTTS: torch.compile warmup complete")
 
         logger.info(
-            "VietTTS: ready (short step=%d, norm step=%d, long step=%d; "
-            "short thresh=%d, long thresh=%d)",
+            "VietTTS: loaded on %s (short step=%d, norm step=%d, long step=%d)",
+            self._device,
             self._num_step_short,
             self._num_step,
             self._num_step_long,
-            self._short_threshold,
-            self._long_threshold,
         )
 
     def register_voice(self, name: str, ref_audio, ref_text_file) -> None:
         """Cache a voice-clone prompt under `name`. Call after load()."""
         ref_audio = Path(ref_audio)
         ref_text_file = Path(ref_text_file)
+        if not ref_audio.is_file():
+            alt_audio = ref_audio.with_suffix(".wav") if ref_audio.suffix != ".wav" else ref_audio.with_suffix(".mp3")
+            if alt_audio.is_file():
+                ref_audio = alt_audio
         if not (ref_audio.is_file() and ref_text_file.is_file()):
             logger.warning("VietTTS: voice %r refs missing (%s, %s) — skipped",
                            name, ref_audio, ref_text_file)
@@ -163,15 +158,33 @@ class VietTTSEngine:
             ref_text = f.read().strip()
         if self._model is None:
             raise RuntimeError("VietTTSEngine.load() must be called before register_voice()")
-        self._voice_prompts[name] = self._model.create_voice_clone_prompt(
-            ref_audio=str(ref_audio), ref_text=ref_text,
-        )
+        import torch
+        with torch.inference_mode():
+            self._voice_prompts[name] = self._model.create_voice_clone_prompt(
+                ref_audio=str(ref_audio), ref_text=ref_text,
+            )
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         logger.info("VietTTS: cached voice prompt %r from %s", name, ref_audio.name)
+
+    def warmup(self) -> None:
+        """Lightweight warmup pass after all voices are registered."""
+        if self._model is None:
+            return
+        import torch
+        with torch.inference_mode():
+            try:
+                self._model.generate(text="Xin chào.", language="vietnamese", num_step=8)
+            except Exception as exc:
+                logger.warning("VietTTS: warmup failed: %s", exc)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     def synthesize(
         self,
         text: str,
         voice: Optional[str] = None,
+        language: str = "vietnamese",
         num_step: Optional[int] = None,
     ) -> np.ndarray:
         """Generate 24 kHz mono float32 audio for `text`.
@@ -193,7 +206,7 @@ class VietTTSEngine:
                 num_step = self._num_step
 
         kwargs: dict = {
-            "language": "vietnamese",
+            "language": language,
             "num_step": num_step,
             "guidance_scale": 2.0,
             "audio_chunk_duration": self._audio_chunk_duration,
@@ -210,4 +223,5 @@ class VietTTSEngine:
         return audio_list[0].astype(np.float32)
 
 
-__all__ = ["VietTTSEngine"]
+OmniVoiceEngine = VietTTSEngine
+__all__ = ["VietTTSEngine", "OmniVoiceEngine"]
