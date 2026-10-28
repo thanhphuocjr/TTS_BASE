@@ -1,31 +1,17 @@
-"""Audio post-processing: tempo adjust, voice-changer presets, WAV encoding.
+"""Audio post-processing: tempo adjust, loudness, WAV/PCM encoding, transcoding.
 
-All heavy DSP is shelled out to sox / Praat (parselmouth). Functions accept
-mono float32 numpy arrays at the engine's sample rate.
+Tempo is shelled out to sox, transcoding to ffmpeg. Functions accept mono
+float32 numpy arrays at the engine's sample rate.
 """
 import io
-import json
 import os
 import struct
 import subprocess
 import tempfile
-from pathlib import Path
 
 import numpy as np
 
-from config.settings import OUTPUT_SR, PRESETS_DIR, SOX_PATH
-
-
-# ---- Preset loading -------------------------------------------------------
-_PRESET_CACHE: dict = {}
-
-
-def _load_preset(name: str) -> dict:
-    if name not in _PRESET_CACHE:
-        path = Path(PRESETS_DIR) / f"{name}.json"
-        with open(path, "r", encoding="utf-8") as f:
-            _PRESET_CACHE[name] = json.load(f)
-    return _PRESET_CACHE[name]
+from config.settings import OUTPUT_SR, SOX_PATH
 
 
 # ---- Shelled-out sox -----------------------------------------------------
@@ -54,55 +40,6 @@ def sox_tempo(audio: np.ndarray, sr: int, factor: float) -> np.ndarray:
         return out
     finally:
         for p in (path_in, path_out):
-            try: os.unlink(p)
-            except OSError: pass
-
-
-# ---- Praat-based voice changer -------------------------------------------
-def apply_voice_preset(audio: np.ndarray, sr: int, preset_name: str) -> np.ndarray:
-    """Apply a Praat 'Change gender' transform with sox pre/post processing."""
-    if SOX_PATH is None:
-        raise RuntimeError("sox not found")
-    try:
-        import parselmouth
-        from parselmouth.praat import call
-    except ImportError:
-        return audio
-    import soundfile as sf
-
-    preset = _load_preset(preset_name)
-
-    paths = []
-    try:
-        for _ in range(4):
-            fd, p = tempfile.mkstemp(suffix=".wav")
-            os.close(fd); paths.append(p)
-        path_raw, path_clean, path_praat, path_out = paths
-
-        sf.write(path_raw, audio, sr, subtype="PCM_16")
-        _run_sox([SOX_PATH, path_raw, path_clean, "highpass", "80", "norm"])
-
-        sound = parselmouth.Sound(path_clean)
-        result = call(
-            sound, "Change gender...",
-            preset["pitch_floor"], preset["pitch_ceiling"],
-            preset["formant_shift"], preset["pitch_median"],
-            preset["pitch_range"], 1.0,
-        )
-
-        max_amp = np.abs(result.values).max()
-        if max_amp > 0:
-            result.values /= max_amp * 1.05
-
-        result.save(path_praat, "WAV")
-        _run_sox([SOX_PATH, path_praat, path_out,
-                  "rate", str(OUTPUT_SR),
-                  "highpass", "80", "lowpass", "12000", "norm"])
-
-        out_audio, _ = sf.read(path_out, dtype="float32")
-        return out_audio
-    finally:
-        for p in paths:
             try: os.unlink(p)
             except OSError: pass
 

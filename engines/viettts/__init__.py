@@ -223,5 +223,4 @@ class VietTTSEngine:
         return audio_list[0].astype(np.float32)
 
 
-OmniVoiceEngine = VietTTSEngine
-__all__ = ["VietTTSEngine", "OmniVoiceEngine"]
+__all__ = ["VietTTSEngine"]

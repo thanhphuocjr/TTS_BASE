@@ -1,36 +1,39 @@
-# StreamingTTS — Python dependencies
+# StreamingTTS — Python dependencies (installed by Dockerfile)
 #
-# System packages (already installed by Dockerfile):
-#   sox libsox-fmt-mp3 ffmpeg espeak-ng portaudio19-dev libltdl7 libmagic1
+# Install with constraints so every package, direct or transitive, keeps the
+# exact version that ran in production:
+#   pip install -c constraints.txt -r requirements.txt
+#   pip install -c constraints.txt --no-deps omnivoice soe-vinorm
+#
+# System packages (installed by Dockerfile): sox libsox-fmt-mp3 ffmpeg libsndfile1
 # ----------------------------------------------------------------------
 
-# PyTorch (CUDA 12.8 wheels) — match the system CUDA driver
+# PyTorch (CUDA 12.8 wheels bundle their own CUDA/cuDNN libraries, so the
+# image does not need a CUDA base image — only the host NVIDIA driver)
 --extra-index-url https://download.pytorch.org/whl/cu128
-torch==2.8.0
-torchaudio==2.8.0
+torch==2.8.0+cu128
+torchaudio==2.8.0+cu128
 
-# TTS backend (used by engines/viettts/ and engines/engtts/)
-omnivoice
+# OmniVoice runtime deps. omnivoice itself is installed with --no-deps
+# because it also declares gradio / tensorboardX / webdataset (demo and
+# training only, never imported at inference time).
+transformers
+accelerate
+huggingface_hub
+librosa
+pydub
+soundfile
+numpy
 
-# Vietnamese text normalization (used only inside text_normalizer/)
-# soe-vinorm itself is installed separately in the Dockerfile with --no-deps
-# because its huggingface-hub pin (<1.0) conflicts with the transformers 5.x
-# stack. Its other transitive deps must be listed here explicitly:
+# soe-vinorm (Vietnamese text normalization) runtime deps. soe-vinorm itself
+# is installed with --no-deps because its huggingface-hub<1.0 pin conflicts
+# with the transformers 5.x stack.
 sklearn-crfsuite
 onnxruntime
 unidecode
 num2words
 
-# Audio I/O
-soundfile>=0.12.0
-numpy>=1.26,<2.0
-
-# HuggingFace stack
-huggingface_hub>=1.5.0,<2.0
-transformers>=5.5.0
-
 # Web server
-fastapi>=0.111.0
-uvicorn[standard]>=0.29.0
-pydantic>=2.0
-python-multipart>=0.0.6
+fastapi
+uvicorn[standard]
+pydantic

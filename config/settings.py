@@ -11,15 +11,13 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # ---- API / server ---------------------------------------------------------
 API_KEY        = os.environ.get("TTS_API_KEY", "ioit2025")
-HOST           = os.environ.get("TTS_HOST", "0.0.0.0")
-PORT           = int(os.environ.get("TTS_PORT", "13128"))
+PORT          = int(os.environ.get("TTS_PORT", "13128"))
 MAX_WORKERS    = int(os.environ.get("TTS_MAX_WORKERS", "1"))
 OUTPUT_SR      = int(os.environ.get("TTS_OUTPUT_SR", "24000"))
 
 # ---- Engine paths (baked into image) -------------------------------------
 MODELS_DIR     = Path(os.environ.get("TTS_MODELS_DIR", str(ROOT / "models")))
 VOICES_DIR     = Path(os.environ.get("TTS_VOICES_DIR", str(ROOT / "voices")))
-PRESETS_DIR    = Path(os.environ.get("TTS_PRESETS_DIR", str(ROOT / "presets")))
 LOGS_DIR       = Path(os.environ.get("TTS_LOGS_DIR", str(ROOT / "logs")))
 
 VIETTTS_MODEL_DIR    = MODELS_DIR / "viettts"
@@ -74,7 +72,6 @@ ENGTTS_AUDIO_CHUNK_DURATION  = float(
 ENGTTS_AUDIO_CHUNK_THRESHOLD = float(
     os.environ.get("TTS_ENGTTS_AUDIO_CHUNK_THRESHOLD", "15.0")
 )
-ENGTTS_TORCH_COMPILE    = os.environ.get("TTS_ENGTTS_TORCH_COMPILE", "0") == "1"
 ENGTTS_VOLUME_BOOST     = float(os.environ.get("TTS_ENGTTS_VOLUME_BOOST", "1.5"))
 VIETTTS_VOLUME_BOOST    = float(os.environ.get("TTS_VIETTTS_VOLUME_BOOST", "1.0"))
 
@@ -182,6 +179,42 @@ VOICE_MAP = {
         "engine": "engtts",
         "voice": "english_north",
         "region": "north",
+        "language": "english",
+        "model": "EngTTS",
+    },
+    # AI Calling custom voices
+    "ai_calling_vi": {
+        "engine": "viettts",
+        "voice": "ai_calling_vi",
+        "region": "ai_calling",
+        "language": "vietnamese",
+        "model": "VietTTS",
+    },
+    "ai_calling_en": {
+        "engine": "engtts",
+        "voice": "ai_calling_en",
+        "region": "ai_calling",
+        "language": "english",
+        "model": "EngTTS",
+    },
+    "ai_calling": {
+        "engine": "viettts",
+        "voice": "ai_calling_vi",
+        "region": "ai_calling",
+        "language": "vietnamese",
+        "model": "VietTTS",
+    },
+    "vi_ai_calling": {
+        "engine": "viettts",
+        "voice": "ai_calling_vi",
+        "region": "ai_calling",
+        "language": "vietnamese",
+        "model": "VietTTS",
+    },
+    "en_ai_calling": {
+        "engine": "engtts",
+        "voice": "ai_calling_en",
+        "region": "ai_calling",
         "language": "english",
         "model": "EngTTS",
     },

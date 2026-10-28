@@ -1,10 +1,9 @@
 """Unified TTS Server — OpenAI-compatible API (POST /v1/audio/speech).
 
 Routes are voice-id based (all powered by OmniVoice Zero-Shot Voice Cloning):
-  voice=vi_fe -> VietTTSEngine (OmniVoice), cloned female voice (south2)
-  voice=vi_ma -> VietTTSEngine (OmniVoice), cloned male voice (north1)
-  voice=en_fe -> VietTTSEngine (OmniVoice), cloned English female voice (english1)
-  voice=en_ma -> VietTTSEngine (OmniVoice), cloned English male voice (english2)
+  vietnamese_north / vietnamese_south / ai_calling_vi -> VietTTSEngine (OmniVoice fine-tuned VI)
+  english_north / english_south / ai_calling_en       -> EngTTSEngine  (OmniVoice pretrained)
+Aliases (north, south, vi_fe, en_ma, ai_calling, ...) are defined in config.settings.VOICE_MAP.
 
 Auth: Bearer token via config.settings.API_KEY.
 """
@@ -46,7 +45,6 @@ from config.settings import (
     ENGTTS_NUM_STEP_SHORT,
     ENGTTS_SAMPLE_RATE,
     ENGTTS_SHORT_THRESHOLD,
-    ENGTTS_TORCH_COMPILE,
     ENGTTS_VOLUME_BOOST,
     MAX_WORKERS,
     MODEL_MAP,
@@ -81,6 +79,16 @@ from text_normalizer import TextNormalizer
 csv_logger.init()
 logger = logging.getLogger("uvicorn")
 
+
+class _SkipHealthAccessLog(logging.Filter):
+    """Drop access-log lines for /health (Docker HEALTHCHECK polls it every 30s)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "/health" not in record.getMessage()
+
+
+logging.getLogger("uvicorn.access").addFilter(_SkipHealthAccessLog())
+
 _lock = threading.Lock()
 _executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
 
@@ -106,7 +114,6 @@ _engtts: EngTTSEngine = EngTTSEngine(
     long_threshold=ENGTTS_LONG_THRESHOLD,
     audio_chunk_duration=ENGTTS_AUDIO_CHUNK_DURATION,
     audio_chunk_threshold=ENGTTS_AUDIO_CHUNK_THRESHOLD,
-    torch_compile=ENGTTS_TORCH_COMPILE,
 )
 _normalizer: TextNormalizer = TextNormalizer(model_path=str(NORMALIZER_MODEL_DIR))
 
@@ -142,19 +149,13 @@ def _load_all() -> None:
             ref_audio=VOICES_DIR / "vietnamese_south.wav",
             ref_text_file=VOICES_DIR / "vietnamese_south.txt",
         )
-        # Backward-compatible voice aliases in prompt cache
-        if "vietnamese_north" in _viettts._voice_prompts:
-            _viettts._voice_prompts["north"] = _viettts._voice_prompts["vietnamese_north"]
-            _viettts._voice_prompts["vi_north"] = _viettts._voice_prompts["vietnamese_north"]
-            _viettts._voice_prompts["vi_male"] = _viettts._voice_prompts["vietnamese_north"]
-            _viettts._voice_prompts["male"] = _viettts._voice_prompts["vietnamese_north"]
-            _viettts._voice_prompts["vi_ma"] = _viettts._voice_prompts["vietnamese_north"]
-        if "vietnamese_south" in _viettts._voice_prompts:
-            _viettts._voice_prompts["south"] = _viettts._voice_prompts["vietnamese_south"]
-            _viettts._voice_prompts["vi_south"] = _viettts._voice_prompts["vietnamese_south"]
-            _viettts._voice_prompts["vi_female"] = _viettts._voice_prompts["vietnamese_south"]
-            _viettts._voice_prompts["female"] = _viettts._voice_prompts["vietnamese_south"]
-            _viettts._voice_prompts["vi_fe"] = _viettts._voice_prompts["vietnamese_south"]
+        _viettts.register_voice(
+            "ai_calling_vi",
+            ref_audio=VOICES_DIR / "ai_calling_vi.wav",
+            ref_text_file=VOICES_DIR / "ai_calling_vi.txt",
+        )
+        # Aliases (north, vi_fe, ...) resolve to these canonical names via
+        # VOICE_MAP[...]["voice"], so no alias entries are needed here.
 
         gc.collect()
         if torch.cuda.is_available():
@@ -189,17 +190,11 @@ def _load_all() -> None:
             ref_audio=VOICES_DIR / "english_south.wav",
             ref_text_file=VOICES_DIR / "english_south.txt",
         )
-        # Backward-compatible voice aliases in prompt cache
-        if "english_north" in _engtts._voice_prompts:
-            _engtts._voice_prompts["en_north"] = _engtts._voice_prompts["english_north"]
-            _engtts._voice_prompts["en_male"] = _engtts._voice_prompts["english_north"]
-            _engtts._voice_prompts["en_ma"] = _engtts._voice_prompts["english_north"]
-            _engtts._voice_prompts["north"] = _engtts._voice_prompts["english_north"]
-        if "english_south" in _engtts._voice_prompts:
-            _engtts._voice_prompts["en_south"] = _engtts._voice_prompts["english_south"]
-            _engtts._voice_prompts["en_female"] = _engtts._voice_prompts["english_south"]
-            _engtts._voice_prompts["en_fe"] = _engtts._voice_prompts["english_south"]
-            _engtts._voice_prompts["south"] = _engtts._voice_prompts["english_south"]
+        _engtts.register_voice(
+            "ai_calling_en",
+            ref_audio=VOICES_DIR / "ai_calling_en.wav",
+            ref_text_file=VOICES_DIR / "ai_calling_en.txt",
+        )
 
         gc.collect()
         if torch.cuda.is_available():
@@ -405,6 +400,11 @@ async def speech(req: SpeechRequest, _auth=Depends(require_api_key)):
                 voice_key = f"en_{req.voice}"
             else:
                 voice_key = f"vi_{req.voice}"
+        elif req.voice == "ai_calling":
+            if req.model == "EngTTS":
+                voice_key = "ai_calling_en"
+            else:
+                voice_key = "ai_calling_vi"
         elif req.voice not in VOICE_MAP:
             for candidate in (f"vi_{req.voice}", f"en_{req.voice}", f"vietnamese_{req.voice}", f"english_{req.voice}"):
                 if candidate in VOICE_MAP:

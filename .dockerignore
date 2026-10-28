@@ -1,0 +1,13 @@
+# Keep the build context to what the Dockerfile COPYs.
+# models/viettts, engtts, normalizer ARE baked into the image; skip only junk.
+models/engtts_kokoro_backup/
+models/**/.cache/
+logs/
+**/__pycache__/
+**/*.pyc
+**/.DS_Store
+.git/
+*.md
+*.sh
+*.wav
+!voices/*.wav

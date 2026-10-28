@@ -10,7 +10,6 @@ natural English pronunciation and zero-shot voice cloning.
     audio = eng.synthesize("Hello world.", voice="en_female")
 """
 import logging
-import os
 from pathlib import Path
 from typing import Optional
 
@@ -69,7 +68,6 @@ class EngTTSEngine:
         long_threshold: int = 50,
         audio_chunk_duration: float = 10.0,
         audio_chunk_threshold: float = 15.0,
-        torch_compile: bool = False,
     ):
         self._model_dir = str(model_dir)
         self._device = device
@@ -80,7 +78,6 @@ class EngTTSEngine:
         self._long_threshold = long_threshold
         self._audio_chunk_duration = audio_chunk_duration
         self._audio_chunk_threshold = audio_chunk_threshold
-        self._torch_compile = torch_compile
         self._model = None
         self._voice_prompts: dict = {}
 
